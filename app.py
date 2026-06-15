@@ -4,7 +4,7 @@ import io
 
 st.set_page_config(page_title="Impact Analysis Tool", layout="wide")
 
-st.title("🚨 Impact Analysis Tool")
+st.title("Impact Analysis Tool")
 
 # ===============================
 # 📘 INSTRUCTIONS (NEW)
