@@ -4,29 +4,30 @@ import io
 
 st.set_page_config(page_title="Impact Analysis Tool", layout="wide")
 
-st.title("IMPACT ANALYSIS TOOL")
+st.title("🚨 Impact Analysis Tool")
 
 # ===============================
-# 📘 INSTRUCTIONS (NEW)
+# INSTRUCTIONS
 # ===============================
 st.markdown("""
 ## 📌 Instructions
 
-Before uploading your JIRA file, please ensure It must contains the required columns:
+Before uploading your JIRA file:
+
+✅ File must be **.xls**  
+✅ Required columns:
 
 - **priority**
 - **found in**
 - **test case id**
+
+⚠️ Column names are case-insensitive.
 """)
 
 # ===============================
 # CONFIG
 # ===============================
-REQUIRED_COLUMNS = [
-    "priority",
-    "found_in",
-    "test_case_id"
-]
+REQUIRED_COLUMNS = ["priority", "found_in", "test_case_id"]
 
 COLUMN_MAPPING = {
     "test case id": "test_case_id",
@@ -47,14 +48,11 @@ def load_polarion():
             sheet_name="Results",
             skiprows=4
         )
-
         df.columns = df.columns.astype(str).str.strip().str.lower()
         return df
-
     except Exception as e:
         st.warning(f"⚠️ Polarion file error: {e}")
         return None
-
 
 # ===============================
 # HELPERS
@@ -83,7 +81,6 @@ def read_jira_file(file):
     except:
         return None
 
-
 # ===============================
 # MERGE
 # ===============================
@@ -94,13 +91,6 @@ def merge_polarion(df, df_pol):
         df["polarion_match"] = "NO"
         df["safety_flag"] = ""
         return df
-
-    if "verification case id" not in df_pol.columns:
-        st.error("❌ Polarion file missing 'verification case id'")
-        return df
-
-    if "safety" not in df_pol.columns:
-        df_pol["safety"] = ""
 
     pol_lookup = {
         str(v).strip(): str(s).strip()
@@ -118,7 +108,6 @@ def merge_polarion(df, df_pol):
     df["polarion_match"] = df["polarion_test_match"]
 
     return df
-
 
 # ===============================
 # SCORING
@@ -186,7 +175,6 @@ def calculate_score(row):
         impact = "Medium"
         action = "Plan fix in next release"
 
-   
     justification = (
         f"The defect priority is {priority_text}, the ASIL classification is {asil_label}, "
         f"and it was identified during {fi_label}. "
@@ -196,12 +184,11 @@ def calculate_score(row):
 
     return pd.Series([impact, action, justification])
 
-
 # ===============================
 # UI
 # ===============================
 uploaded_file = st.file_uploader(
-    "📂 Upload JIRA Excel file (.xls)",
+    "📂 Upload JIRA file (.xls)",
     type=["xls"],
     accept_multiple_files=False
 )
@@ -211,23 +198,15 @@ if uploaded_file:
     df = read_jira_file(uploaded_file)
 
     if df is None:
-        st.error("❌ Could not read JIRA file. Please check format.")
+        st.error("❌ Could not read JIRA file")
         st.stop()
 
     df = normalize_columns(df)
 
-    # ✅ VALIDATION MESSAGE (NEW)
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
 
     if missing:
-        st.error(f"""
-        ❌ Missing required columns: {missing}
-
-        Please ensure your JIRA file includes:
-        - priority
-        - found in
-        - test case id
-        """)
+        st.error(f"❌ Missing columns: {missing}")
         st.stop()
 
     df_pol = load_polarion()
@@ -238,11 +217,36 @@ if uploaded_file:
         axis=1
     )
 
-    st.subheader("🚨 Impact Analysis Results")
-    st.dataframe(df, use_container_width=True)
+    # ===============================
+    # 🔥 OCULTAR COLUMNAS POLARION
+    # ===============================
+    columns_to_hide = [
+        "polarion_test_match",
+        "safety_flag",
+        "polarion_match"
+    ]
 
+    df_display = df.drop(columns=[c for c in columns_to_hide if c in df.columns])
+
+    # ===============================
+    # ✅ TABLA PRINCIPAL
+    # ===============================
+    st.subheader("🚨 Impact Analysis Results")
+    st.dataframe(df_display, use_container_width=True)
+
+    # ===============================
+    # 🔴 SEGUNDA TABLA (HIGH ONLY)
+    # ===============================
+    df_high = df_display[df_display["Impact Level"] == "High"]
+
+    st.subheader("🔴 High Impact Defects (Action Required)")
+    st.dataframe(df_high, use_container_width=True)
+
+    # ===============================
+    # DOWNLOAD
+    # ===============================
     buffer = io.BytesIO()
-    df.to_excel(buffer, index=False, engine="openpyxl")
+    df_display.to_excel(buffer, index=False, engine="openpyxl")
     buffer.seek(0)
 
     st.download_button(
@@ -250,3 +254,4 @@ if uploaded_file:
         buffer,
         file_name="impact_analysis.xlsx"
     )
+``
