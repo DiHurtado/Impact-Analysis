@@ -6,6 +6,9 @@ st.set_page_config(page_title="Impact Analysis Tool", layout="wide")
 
 st.title("🚨 Impact Analysis Tool")
 
+# ===============================
+# CONFIG
+# ===============================
 REQUIRED_COLUMNS = [
     "priority",
     "found_in",
@@ -20,22 +23,29 @@ COLUMN_MAPPING = {
 }
 
 # ===============================
-# LOAD POLARION
+# ✅ LOAD POLARION DESDE GITHUB
 # ===============================
+@st.cache_data
 def load_polarion():
-    path = r"C:\Users\dihurtado\BorgWarner\17001357 AM_Stellantis _PE INV_150kW and 250kW PIM_MY24 - 05-Metrics\PolarionInternalWorkItemsSTLA_400V.xlsm"
-
     try:
-        df = pd.read_excel(path, engine="openpyxl", sheet_name="Results", skiprows=4)
+        df = pd.read_excel(
+            "data/PolarionInternalWorkItemsSTLA_400V.xlsm",
+            engine="openpyxl",
+            sheet_name="Results",
+            skiprows=4
+        )
+
         df.columns = df.columns.astype(str).str.strip().str.lower()
+
         return df
+
     except Exception as e:
         st.warning(f"⚠️ Polarion file error: {e}")
         return None
 
 
 # ===============================
-# EXTRAER ID
+# EXTRAER TEST ID
 # ===============================
 def extract_test_case_id(value):
     if pd.isna(value):
@@ -57,12 +67,7 @@ def merge_polarion(df, df_pol):
         df["safety_flag"] = ""
         return df
 
-    jira_test_col = "test_case_id" if "test_case_id" in df.columns else None
-
-    if jira_test_col is None:
-        df["polarion_test_match"] = "NO"
-        df["polarion_match"] = "NO"
-        df["safety_flag"] = ""
+    if "test_case_id" not in df.columns:
         return df
 
     if "verification case id" not in df_pol.columns:
@@ -79,8 +84,7 @@ def merge_polarion(df, df_pol):
     }
 
     def process_row(row):
-        raw = row.get(jira_test_col)
-        test_id = extract_test_case_id(raw)
+        test_id = extract_test_case_id(row.get("test_case_id"))
 
         if test_id in pol_lookup:
             return pd.Series(["YES", pol_lookup[test_id]])
@@ -94,7 +98,7 @@ def merge_polarion(df, df_pol):
 
 
 # ===============================
-# READ JIRA
+# LEER JIRA
 # ===============================
 def read_jira_file(file):
     try:
@@ -105,54 +109,32 @@ def read_jira_file(file):
 
 
 # ===============================
-# NORMALIZE
+# NORMALIZAR
 # ===============================
 def normalize_columns(df):
-    cols = []
-    for col in df.columns:
-        c = str(col).strip().lower()
-        cols.append(COLUMN_MAPPING.get(c, c))
-    df.columns = cols
+    df.columns = [
+        COLUMN_MAPPING.get(str(c).strip().lower(), str(c).strip().lower())
+        for c in df.columns
+    ]
     return df
 
 
 # ===============================
-# FIX DUPLICATES
+# SCORING + JUSTIFICACIÓN
 # ===============================
-def fix_duplicates(df):
-    seen = {}
-    new_cols = []
+def calculate_score(row):
 
-    for col in df.columns:
-        if col not in seen:
-            seen[col] = 0
-            new_cols.append(col)
-        else:
-            seen[col] += 1
-            new_cols.append(f"{col}_{seen[col]}")
-
-    df.columns = new_cols
-    return df
-
-
-# ===============================
-# ✅ SCORING + NATURAL JUSTIFICATION
-# ===============================
-def calculate_new_score(row):
-
-    # PRIORITY
     pr_map = {"blocker": 4, "high": 3, "medium": 2, "low": 1}
-    priority_raw = str(row.get("priority", "")).lower()
-    priority_val = pr_map.get(priority_raw, 1)
+    priority = str(row.get("priority", "")).lower()
+    pr_val = pr_map.get(priority, 1)
 
     priority_text = {
-        "blocker": "blocker",
+        "blocker": "crítica",
         "high": "alta",
         "medium": "media",
         "low": "baja"
-    }.get(priority_raw, "baja")
+    }.get(priority, "baja")
 
-    # ASIL
     safety = str(row.get("safety_flag", "")).lower()
     asil_map = {"asil d": 5, "asil c": 4, "asil b": 3, "asil a": 2, "qm": 1}
 
@@ -165,78 +147,55 @@ def calculate_new_score(row):
             asil_label = k.upper()
             break
 
-    # FOUND IN
-    found = str(row.get("found_in", "")).lower()
-
     fi_map = {
         "by customer": (5, "By Customer"),
-        "system qualification test": (4, "System Qualification Test"),
-        "system integration test": (3, "System Integration Test"),
-        "software qualification test": (4, "Software Qualification Test"),
-        "software integration test": (3, "Software Integration Test"),
-        "software unit test": (2, "Software Unit Test")
+        "system qualification": (4, "System Qualification Test"),
+        "integration": (3, "System Integration Test"),
+        "software qualification": (4, "Software Qualification Test")
     }
 
     fi_val = 1
     fi_label = "Other"
 
+    found = str(row.get("found_in", "")).lower()
     for k, (v, label) in fi_map.items():
         if k in found:
             fi_val = v
             fi_label = label
             break
 
-    # PRELIMINAR
-    prelim = priority_val * fi_val
+    prelim = pr_val * fi_val
 
     if prelim >= 10:
-        prelim_severity = "High"
-        score = 3
+        sev = "High"
     elif prelim <= 3:
-        prelim_severity = "Low"
-        score = 1
+        sev = "Low"
     else:
-        prelim_severity = "Medium"
-        score = 2
+        sev = "Medium"
 
-    # FINAL
-    final_calc = score * asil_val
+    final_score = asil_val * (3 if sev == "High" else 2 if sev == "Medium" else 1)
 
-    if final_calc >= 10:
-        final_severity = "High"
+    if final_score >= 10:
+        impact = "High"
         action = "Immediate cross-functional action required"
-    elif final_calc <= 3:
-        final_severity = "Low"
+    elif final_score <= 3:
+        impact = "Low"
         action = "Monitor"
     else:
-        final_severity = "Medium"
+        impact = "Medium"
         action = "Plan fix in next release"
 
-    # ✅ JUSTIFICACIÓN NATURAL
     justification = (
         f"La prioridad del defecto es {priority_text}, "
-        f"el nivel de seguridad es {asil_label} "
-        f"y fue encontrado en {fi_label}. "
-        f"Con base en estos factores, el impacto final se clasifica como {final_severity} "
-        f"y se recomienda la siguiente acción: {action}."
+        f"el ASIL es {asil_label} y fue encontrado en {fi_label}. "
+        f"Con base en esto, el impacto es {impact} y se recomienda: {action}."
     )
 
-    return pd.Series([
-        priority_val,
-        fi_val,
-        asil_val,
-        prelim,
-        prelim_severity,
-        score,
-        final_calc,
-        final_severity,
-        action,
-        justification
-    ])
+    return pd.Series([impact, action, justification])
 
 
 # ===============================
-# APP
+# UI
 # ===============================
 uploaded_file = st.file_uploader(
     "Upload JIRA Excel (.xls)",
@@ -249,11 +208,10 @@ if uploaded_file:
     df = read_jira_file(uploaded_file)
 
     if df is None:
-        st.error("❌ Could not extract table")
+        st.error("❌ Could not read JIRA file")
         st.stop()
 
     df = normalize_columns(df)
-    df = fix_duplicates(df)
 
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
 
@@ -264,54 +222,21 @@ if uploaded_file:
     df_pol = load_polarion()
     df = merge_polarion(df, df_pol)
 
-    df_calc = df.copy()
+    df[["Impact Level", "Recommended Action", "Justification"]] = df.apply(
+        calculate_score,
+        axis=1
+    )
 
-    df_calc[[
-        "Priority_Value",
-        "FoundIn_Value",
-        "ASIL_Value",
-        "Preliminary_Result",
-        "Preliminary_Severity",
-        "Score",
-        "Final_Result",
-        "Impact Level",
-        "Recommended Action",
-        "Justification"
-    ]] = df_calc.apply(calculate_new_score, axis=1)
-
-    severity_order = {"High": 0, "Medium": 1, "Low": 2}
-    df_calc["severity_order"] = df_calc["Impact Level"].map(severity_order)
-
-    df_calc = df_calc.sort_values(by=["severity_order", "Final_Result"], ascending=[True, False])
-
-    columns_to_hide = [
-        "polarion_test_match",
-        "polarion_match",
-        "safety_flag",
-        "Priority_Value",
-        "FoundIn_Value",
-        "ASIL_Value",
-        "Preliminary_Severity",
-        "Preliminary_Result",
-        "Score",
-        "Final_Result",
-        "severity_order"
-    ]
-
-    df_display = df_calc.drop(columns=[c for c in columns_to_hide if c in df_calc.columns])
-
-    st.subheader("🚨 Impact Analysis (ASPICE Ready)")
-    st.dataframe(df_display, use_container_width=True)
-
-    st.subheader("🔥 High Impact Defects")
-    st.dataframe(df_display[df_display["Impact Level"] == "High"], use_container_width=True)
+    st.subheader("🚨 Impact Analysis")
+    st.dataframe(df, use_container_width=True)
 
     buffer = io.BytesIO()
-    df_display.to_excel(buffer, index=False, engine="openpyxl")
+    df.to_excel(buffer, index=False, engine="openpyxl")
     buffer.seek(0)
 
     st.download_button(
-        label="📥 Download Analysis",
-        data=buffer,
-        file_name="impact_analysis_clean.xlsx"
+        "📥 Download Results",
+        buffer,
+        file_name="impact_analysis.xlsx"
     )
+``
