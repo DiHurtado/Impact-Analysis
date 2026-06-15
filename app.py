@@ -239,4 +239,3 @@ if uploaded_file:
         buffer,
         file_name="impact_analysis.xlsx"
     )
-``
