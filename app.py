@@ -12,16 +12,13 @@ st.title("🚨 Impact Analysis Tool")
 st.markdown("""
 ## 📌 Instructions
 
-Before uploading your JIRA file:
+Before uploading your JIRA file, please ensure the file is **.xls** and It contains the required columns:
 
-✅ File must be **.xls**  
-✅ Required columns:
+  - **priority**
+  - **found in**
+  - **test case id**
 
-- **priority**
-- **found in**
-- **test case id**
 
-⚠️ Column names are case-insensitive.
 """)
 
 # ===============================
