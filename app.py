@@ -4,7 +4,7 @@ import io
 
 st.set_page_config(page_title="Impact Analysis Tool", layout="wide")
 
-st.title("🚨 Impact Analysis Tool")
+st.title("Impact Analysis Tool")
 
 # ===============================
 # INSTRUCTIONS
@@ -18,8 +18,7 @@ Before uploading your JIRA file, please ensure the file is **.xls** and It conta
   - **found in**
   - **test case id**
 
-
-""")
+  """)
 
 # ===============================
 # CONFIG
