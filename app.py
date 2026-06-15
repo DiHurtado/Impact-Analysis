@@ -7,6 +7,26 @@ st.set_page_config(page_title="Impact Analysis Tool", layout="wide")
 st.title("🚨 Impact Analysis Tool")
 
 # ===============================
+# 📘 INSTRUCTIONS (NEW)
+# ===============================
+st.markdown("""
+## 📌 Instructions
+
+Before uploading your JIRA file, please ensure the following:
+
+✅ The file must be in **Excel (.xls)** format  
+✅ It must contain the required columns:
+
+- **priority**
+- **found in**
+- **test case id**
+
+⚠️ Column names are **case insensitive** but must match these values.
+
+📥 Once validated, upload your file below.
+""")
+
+# ===============================
 # CONFIG
 # ===============================
 REQUIRED_COLUMNS = [
@@ -23,7 +43,7 @@ COLUMN_MAPPING = {
 }
 
 # ===============================
-# ✅ LOAD POLARION DESDE GITHUB
+# LOAD POLARION
 # ===============================
 @st.cache_data
 def load_polarion():
@@ -36,7 +56,6 @@ def load_polarion():
         )
 
         df.columns = df.columns.astype(str).str.strip().str.lower()
-
         return df
 
     except Exception as e:
@@ -45,7 +64,7 @@ def load_polarion():
 
 
 # ===============================
-# EXTRAER TEST ID
+# HELPERS
 # ===============================
 def extract_test_case_id(value):
     if pd.isna(value):
@@ -56,8 +75,24 @@ def extract_test_case_id(value):
     return value.strip()
 
 
+def normalize_columns(df):
+    df.columns = [
+        COLUMN_MAPPING.get(str(c).strip().lower(), str(c).strip().lower())
+        for c in df.columns
+    ]
+    return df
+
+
+def read_jira_file(file):
+    try:
+        tables = pd.read_html(file)
+        return tables[1] if len(tables) > 1 else None
+    except:
+        return None
+
+
 # ===============================
-# MERGE POLARION
+# MERGE
 # ===============================
 def merge_polarion(df, df_pol):
 
@@ -67,11 +102,8 @@ def merge_polarion(df, df_pol):
         df["safety_flag"] = ""
         return df
 
-    if "test_case_id" not in df.columns:
-        return df
-
     if "verification case id" not in df_pol.columns:
-        st.error(f"❌ Columns available: {df_pol.columns.tolist()}")
+        st.error("❌ Polarion file missing 'verification case id'")
         return df
 
     if "safety" not in df_pol.columns:
@@ -85,10 +117,8 @@ def merge_polarion(df, df_pol):
 
     def process_row(row):
         test_id = extract_test_case_id(row.get("test_case_id"))
-
         if test_id in pol_lookup:
             return pd.Series(["YES", pol_lookup[test_id]])
-
         return pd.Series(["NO", ""])
 
     df[["polarion_test_match", "safety_flag"]] = df.apply(process_row, axis=1)
@@ -98,29 +128,7 @@ def merge_polarion(df, df_pol):
 
 
 # ===============================
-# LEER JIRA
-# ===============================
-def read_jira_file(file):
-    try:
-        tables = pd.read_html(file)
-        return tables[1] if len(tables) > 1 else None
-    except:
-        return None
-
-
-# ===============================
-# NORMALIZAR
-# ===============================
-def normalize_columns(df):
-    df.columns = [
-        COLUMN_MAPPING.get(str(c).strip().lower(), str(c).strip().lower())
-        for c in df.columns
-    ]
-    return df
-
-
-# ===============================
-# SCORING + JUSTIFICACIÓN
+# SCORING
 # ===============================
 def calculate_score(row):
 
@@ -129,11 +137,11 @@ def calculate_score(row):
     pr_val = pr_map.get(priority, 1)
 
     priority_text = {
-        "blocker": "crítica",
-        "high": "alta",
-        "medium": "media",
-        "low": "baja"
-    }.get(priority, "baja")
+        "blocker": "critical",
+        "high": "high",
+        "medium": "medium",
+        "low": "low"
+    }.get(priority, "low")
 
     safety = str(row.get("safety_flag", "")).lower()
     asil_map = {"asil d": 5, "asil c": 4, "asil b": 3, "asil a": 2, "qm": 1}
@@ -148,14 +156,14 @@ def calculate_score(row):
             break
 
     fi_map = {
-        "by customer": (5, "By Customer"),
-        "system qualification": (4, "System Qualification Test"),
-        "integration": (3, "System Integration Test"),
-        "software qualification": (4, "Software Qualification Test")
+        "by customer": (5, "customer testing"),
+        "system qualification": (4, "system qualification testing"),
+        "integration": (3, "system integration testing"),
+        "software qualification": (4, "software qualification testing")
     }
 
     fi_val = 1
-    fi_label = "Other"
+    fi_label = "other testing phase"
 
     found = str(row.get("found_in", "")).lower()
     for k, (v, label) in fi_map.items():
@@ -185,10 +193,12 @@ def calculate_score(row):
         impact = "Medium"
         action = "Plan fix in next release"
 
+   
     justification = (
-        f"La prioridad del defecto es {priority_text}, "
-        f"el ASIL es {asil_label} y fue encontrado en {fi_label}. "
-        f"Con base en esto, el impacto es {impact} y se recomienda: {action}."
+        f"The defect priority is {priority_text}, the ASIL classification is {asil_label}, "
+        f"and it was identified during {fi_label}. "
+        f"Based on these factors, the overall impact is assessed as {impact}, "
+        f"and the recommended action is: {action}."
     )
 
     return pd.Series([impact, action, justification])
@@ -198,7 +208,7 @@ def calculate_score(row):
 # UI
 # ===============================
 uploaded_file = st.file_uploader(
-    "Upload JIRA Excel (.xls)",
+    "📂 Upload JIRA Excel file (.xls)",
     type=["xls"],
     accept_multiple_files=False
 )
@@ -208,15 +218,23 @@ if uploaded_file:
     df = read_jira_file(uploaded_file)
 
     if df is None:
-        st.error("❌ Could not read JIRA file")
+        st.error("❌ Could not read JIRA file. Please check format.")
         st.stop()
 
     df = normalize_columns(df)
 
+    # ✅ VALIDATION MESSAGE (NEW)
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
 
     if missing:
-        st.error(f"❌ Missing columns: {missing}")
+        st.error(f"""
+        ❌ Missing required columns: {missing}
+
+        Please ensure your JIRA file includes:
+        - priority
+        - found in
+        - test case id
+        """)
         st.stop()
 
     df_pol = load_polarion()
@@ -227,7 +245,7 @@ if uploaded_file:
         axis=1
     )
 
-    st.subheader("🚨 Impact Analysis")
+    st.subheader("🚨 Impact Analysis Results")
     st.dataframe(df, use_container_width=True)
 
     buffer = io.BytesIO()
