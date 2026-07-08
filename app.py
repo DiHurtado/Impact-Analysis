@@ -261,32 +261,17 @@ uploaded_file = st.file_uploader(
     accept_multiple_files=False
 )
 
+
 if uploaded_file:
 
-    df = read_jira_file(uploaded_file)
-
-    if df is None:
-        st.error("❌ Could not read JIRA file")
-        st.stop()
-
-    df = normalize_columns(df)
-
-    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
-
-    if missing:
-        st.error(f"❌ Missing columns: {missing}")
-        st.stop()
-
-    df_pol = load_polarion()
-    df = merge_polarion(df, df_pol)
+    
 
     df[["Impact Level", "Recommended Action", "Justification"]] = df.apply(
         calculate_score,
         axis=1
     )
-  
 
-if "related_requirements" in df.columns:
+    if "related_requirements" in df.columns:
 
         cols = list(df.columns)
 
@@ -301,9 +286,6 @@ if "related_requirements" in df.columns:
 
         df = df[cols]
 
-    # ===============================
-    # 🔥 OCULTAR COLUMNAS POLARION
-    # ===============================
     columns_to_hide = [
         "polarion_test_match",
         "safety_flag",
@@ -317,12 +299,13 @@ if "related_requirements" in df.columns:
         ]
     )
 
-    df_display = df_display.rename(
-        columns={
-            "related_requirements":
-            "Related Requirement IDs"
-        }
-    )
+    if "related_requirements" in df_display.columns:
+        df_display = df_display.rename(
+            columns={
+                "related_requirements":
+                "Related Requirement IDs"
+            }
+        )
 
     # ===============================
     # ✅ TABLA PRINCIPAL
