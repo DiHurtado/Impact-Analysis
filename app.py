@@ -122,7 +122,7 @@ def calculate_score(row):
     }.get(priority, "low")
 
     safety = str(row.get("safety_flag", "")).lower()
-    asil_map = {"asil d": 5, "asil c": 4, "asil b": 3, "asil a": 2, "qm": 1}
+    asil_map = {"D": 5, "C": 4, "B": 3, "A": 2, "QM": 1, "Not Safety Relevant":1}
 
     asil_val = 1
     asil_label = "QM"
