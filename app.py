@@ -285,27 +285,22 @@ if uploaded_file:
         axis=1
     )
   
+
 if "related_requirements" in df.columns:
 
-    cols = list(df.columns)
+        cols = list(df.columns)
 
-    cols.remove("related_requirements")
+        cols.remove("related_requirements")
 
-    insert_pos = cols.index("test_case_id") + 1
+        insert_pos = cols.index("test_case_id") + 1
 
-    cols.insert(
-        insert_pos,
-        "related_requirements"
-    )
+        cols.insert(
+            insert_pos,
+            "related_requirements"
+        )
 
-    df = df[cols]
-  
-df_display = df_display.rename(
-    columns={
-        "related_requirements":
-        "Related Requirement IDs"
-    }
-)
+        df = df[cols]
+
     # ===============================
     # 🔥 OCULTAR COLUMNAS POLARION
     # ===============================
@@ -315,7 +310,19 @@ df_display = df_display.rename(
         "polarion_match"
     ]
 
-    df_display = df.drop(columns=[c for c in columns_to_hide if c in df.columns])
+    df_display = df.drop(
+        columns=[
+            c for c in columns_to_hide
+            if c in df.columns
+        ]
+    )
+
+    df_display = df_display.rename(
+        columns={
+            "related_requirements":
+            "Related Requirement IDs"
+        }
+    )
 
     # ===============================
     # ✅ TABLA PRINCIPAL
