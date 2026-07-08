@@ -80,6 +80,7 @@ def read_jira_file(file):
 # ===============================
 # MERGE
 # ===============================
+
 def merge_polarion(df, df_pol):
 
     if df_pol is None:
@@ -89,24 +90,26 @@ def merge_polarion(df, df_pol):
         df["related_requirements"] = ""
         return df
 
-    pol_lookup = {
+    # Safety lookup
+    safety_lookup = {
         str(v).strip(): str(s).strip()
-        for v, s in zip(df_pol["verification case id"], df_pol["safety"])
+        for v, s in zip(
+            df_pol["verification case id"],
+            df_pol["safety"]
+        )
         if pd.notna(v)
     }
 
-  
-req_lookup = (
+    # Requirement lookup
+    req_lookup = (
         df_pol.groupby("verification case id")["id"]
         .apply(
             lambda x: "; ".join(
                 sorted(
-                    list(
-                        {
-                            str(v).strip()
-                            for v in x
-                            if pd.notna(v)
-                        }
+                    set(
+                        str(v).strip()
+                        for v in x
+                        if pd.notna(v)
                     )
                 )
             )
@@ -114,9 +117,7 @@ req_lookup = (
         .to_dict()
     )
 
-
-
-def process_row(row):
+    def process_row(row):
 
         test_id = extract_test_case_id(
             row.get("test_case_id")
@@ -134,7 +135,7 @@ def process_row(row):
 
         match = (
             "YES"
-            if test_id in req_lookup
+            if requirements != ""
             else "NO"
         )
 
@@ -155,13 +156,9 @@ def process_row(row):
         axis=1
     )
 
-    df["polarion_match"] = df[
-        "polarion_test_match"
-    ]
+    df["polarion_match"] = df["polarion_test_match"]
 
     return df
-
-
 # ===============================
 # SCORING
 # ===============================
