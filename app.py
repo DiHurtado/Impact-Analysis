@@ -121,17 +121,35 @@ def calculate_score(row):
         "low": "low"
     }.get(priority, "low")
 
-    safety = str(row.get("safety_flag", "")).lower()
-    asil_map = {"D": 5, "C": 4, "B": 3, "A": 2, "QM": 1, "Not Safety Relevant":1}
 
-    asil_val = 1
-    asil_label = "QM"
+    safety = str(
+        row.get("safety_flag", "")
+    ).strip().upper()
 
-    for k, v in asil_map.items():
-        if k in safety:
-            asil_val = v
-            asil_label = k.upper()
-            break
+    if safety == "D":
+        asil_val = 5
+        asil_label = "ASIL D"
+
+    elif safety == "C":
+        asil_val = 4
+        asil_label = "ASIL C"
+
+    elif safety == "B":
+        asil_val = 3
+        asil_label = "ASIL B"
+
+    elif safety == "A":
+        asil_val = 2
+        asil_label = "ASIL A"
+
+    elif safety == "QM":
+        asil_val = 1
+        asil_label = "QM"
+
+    else:
+        asil_val = 1
+        asil_label = "Not Safety Relevant"
+
 
     fi_map = {
         "by customer": (5, "customer testing"),
