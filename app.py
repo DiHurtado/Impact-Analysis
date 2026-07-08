@@ -90,7 +90,7 @@ def merge_polarion(df, df_pol):
 
     pol_lookup = {
         str(v).strip(): str(s).strip()
-        for v, s in zip(df_pol["verification case id"], df_pol["safety"])
+        for v, s in zip(df_pol["verification case id"], df_pol["Safety"])
         if pd.notna(v)
     }
 
