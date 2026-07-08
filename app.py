@@ -80,85 +80,31 @@ def read_jira_file(file):
 # ===============================
 # MERGE
 # ===============================
-
 def merge_polarion(df, df_pol):
 
     if df_pol is None:
         df["polarion_test_match"] = "NO"
         df["polarion_match"] = "NO"
         df["safety_flag"] = ""
-        df["related_requirements"] = ""
         return df
 
-    # Safety lookup
-    safety_lookup = {
+    pol_lookup = {
         str(v).strip(): str(s).strip()
-        for v, s in zip(
-            df_pol["verification case id"],
-            df_pol["safety"]
-        )
+        for v, s in zip(df_pol["verification case id"], df_pol["safety"])
         if pd.notna(v)
     }
 
-    # Requirement lookup
-    req_lookup = (
-        df_pol.groupby("verification case id")["id"]
-        .apply(
-            lambda x: "; ".join(
-                sorted(
-                    set(
-                        str(v).strip()
-                        for v in x
-                        if pd.notna(v)
-                    )
-                )
-            )
-        )
-        .to_dict()
-    )
-
     def process_row(row):
+        test_id = extract_test_case_id(row.get("test_case_id"))
+        if test_id in pol_lookup:
+            return pd.Series(["YES", pol_lookup[test_id]])
+        return pd.Series(["NO", ""])
 
-        test_id = extract_test_case_id(
-            row.get("test_case_id")
-        )
-
-        safety = safety_lookup.get(
-            test_id,
-            ""
-        )
-
-        requirements = req_lookup.get(
-            test_id,
-            ""
-        )
-
-        match = (
-            "YES"
-            if requirements != ""
-            else "NO"
-        )
-
-        return pd.Series([
-            match,
-            safety,
-            requirements
-        ])
-
-    df[
-        [
-            "polarion_test_match",
-            "safety_flag",
-            "related_requirements"
-        ]
-    ] = df.apply(
-        process_row,
-        axis=1
-    )
-
+    df[["polarion_test_match", "safety_flag"]] = df.apply(process_row, axis=1)
     df["polarion_match"] = df["polarion_test_match"]
 
     return df
+
 # ===============================
 # SCORING
 # ===============================
@@ -261,51 +207,40 @@ uploaded_file = st.file_uploader(
     accept_multiple_files=False
 )
 
-
 if uploaded_file:
 
-    
+    df = read_jira_file(uploaded_file)
+
+    if df is None:
+        st.error("❌ Could not read JIRA file")
+        st.stop()
+
+    df = normalize_columns(df)
+
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+
+    if missing:
+        st.error(f"❌ Missing columns: {missing}")
+        st.stop()
+
+    df_pol = load_polarion()
+    df = merge_polarion(df, df_pol)
 
     df[["Impact Level", "Recommended Action", "Justification"]] = df.apply(
         calculate_score,
         axis=1
     )
 
-    if "related_requirements" in df.columns:
-
-        cols = list(df.columns)
-
-        cols.remove("related_requirements")
-
-        insert_pos = cols.index("test_case_id") + 1
-
-        cols.insert(
-            insert_pos,
-            "related_requirements"
-        )
-
-        df = df[cols]
-
+    # ===============================
+    # 🔥 OCULTAR COLUMNAS POLARION
+    # ===============================
     columns_to_hide = [
         "polarion_test_match",
         "safety_flag",
         "polarion_match"
     ]
 
-    df_display = df.drop(
-        columns=[
-            c for c in columns_to_hide
-            if c in df.columns
-        ]
-    )
-
-    if "related_requirements" in df_display.columns:
-        df_display = df_display.rename(
-            columns={
-                "related_requirements":
-                "Related Requirement IDs"
-            }
-        )
+    df_display = df.drop(columns=[c for c in columns_to_hide if c in df.columns])
 
     # ===============================
     # ✅ TABLA PRINCIPAL
